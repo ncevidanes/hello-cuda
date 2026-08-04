@@ -1,0 +1,7 @@
+/build/
+/hello_cuda
+*.o
+*.obj
+*.out
+.vscode/
+.idea/
