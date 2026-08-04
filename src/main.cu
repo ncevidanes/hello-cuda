@@ -1,8 +1,8 @@
 #include "cuda_check.cuh"
+#include "indexing.hpp"
 
 #include <cuda_runtime.h>
 
-#include <cstdio>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -18,32 +18,15 @@ struct LaunchConfig {
     int device = 0;
 };
 
-int parsePositiveInteger(const char* text, const std::string& argumentName) {
+int parseInteger(const char* text,
+                 const std::string& argumentName,
+                 int minimum) {
     try {
         const std::string value{text};
         std::size_t parsedCharacters = 0;
         const long parsed = std::stol(value, &parsedCharacters);
 
-        if (parsedCharacters != value.size() || parsed <= 0 ||
-            parsed > std::numeric_limits<int>::max()) {
-            throw std::invalid_argument("fora do intervalo permitido");
-        }
-
-        return static_cast<int>(parsed);
-    } catch (const std::exception&) {
-        throw std::invalid_argument(
-            "Valor inválido para " + argumentName + ": '" + text + "'.");
-    }
-}
-
-int parseNonNegativeInteger(const char* text,
-                            const std::string& argumentName) {
-    try {
-        const std::string value{text};
-        std::size_t parsedCharacters = 0;
-        const long parsed = std::stol(value, &parsedCharacters);
-
-        if (parsedCharacters != value.size() || parsed < 0 ||
+        if (parsedCharacters != value.size() || parsed < minimum ||
             parsed > std::numeric_limits<int>::max()) {
             throw std::invalid_argument("fora do intervalo permitido");
         }
@@ -82,15 +65,14 @@ LaunchConfig parseArguments(int argc, char** argv) {
     LaunchConfig config;
 
     if (argc >= 2) {
-        config.blocks = parsePositiveInteger(argv[1], "blocos");
+        config.blocks = parseInteger(argv[1], "blocos", 1);
     }
     if (argc >= 3) {
         config.threadsPerBlock =
-            parsePositiveInteger(argv[2], "threads_por_bloco");
+            parseInteger(argv[2], "threads_por_bloco", 1);
     }
     if (argc >= 4) {
-        config.device =
-            parseNonNegativeInteger(argv[3], "dispositivo");
+        config.device = parseInteger(argv[3], "dispositivo", 0);
     }
 
     return config;
@@ -120,19 +102,20 @@ void printDeviceProperties(int deviceId, const cudaDeviceProp& properties) {
 }
 
 __global__ void helloCudaKernel() {
-    const unsigned int globalThreadIndex =
-        blockIdx.x * blockDim.x + threadIdx.x;
+    const unsigned long long globalIndex =
+        static_cast<unsigned long long>(hello_cuda::globalThreadIndex(
+            blockIdx.x, blockDim.x, threadIdx.x));
 
-    printf("[GPU] bloco=%u | thread_local=%u | thread_global=%u "
+    printf("[GPU] bloco=%u | thread_local=%u | thread_global=%llu "
            "| blockDim.x=%u | gridDim.x=%u\n",
            blockIdx.x,
            threadIdx.x,
-           globalThreadIndex,
+           globalIndex,
            blockDim.x,
            gridDim.x);
 }
 
-void validateDeviceSelection(const LaunchConfig& config, int deviceCount) {
+void validateDeviceId(const LaunchConfig& config, int deviceCount) {
     if (config.device >= deviceCount) {
         throw std::out_of_range(
             "O dispositivo solicitado não existe. GPUs disponíveis: 0 a " +
@@ -140,8 +123,8 @@ void validateDeviceSelection(const LaunchConfig& config, int deviceCount) {
     }
 }
 
-void validateLaunchDimensions(const LaunchConfig& config,
-                              const cudaDeviceProp& properties) {
+void validateLaunchConfig(const LaunchConfig& config,
+                          const cudaDeviceProp& properties) {
     if (config.threadsPerBlock > properties.maxThreadsPerBlock) {
         throw std::out_of_range(
             "threads_por_bloco excede o limite da GPU selecionada (" +
@@ -178,12 +161,12 @@ int main(int argc, char** argv) {
             printDeviceProperties(deviceId, properties);
         }
 
-        validateDeviceSelection(config, deviceCount);
+        validateDeviceId(config, deviceCount);
 
         cudaDeviceProp selectedProperties{};
         CUDA_CHECK(
             cudaGetDeviceProperties(&selectedProperties, config.device));
-        validateLaunchDimensions(config, selectedProperties);
+        validateLaunchConfig(config, selectedProperties);
         CUDA_CHECK(cudaSetDevice(config.device));
 
         const long long totalThreads =
@@ -201,11 +184,7 @@ int main(int argc, char** argv) {
 
         helloCudaKernel<<<config.blocks, config.threadsPerBlock>>>();
 
-        // Detecta erros de configuração/lançamento, como blocos inválidos.
         CUDA_CHECK(cudaGetLastError());
-
-        // O lançamento é assíncrono em relação à CPU. A sincronização espera
-        // todas as threads terminarem e também revela erros de execução.
         CUDA_CHECK(cudaDeviceSynchronize());
 
         std::cout

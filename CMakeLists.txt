@@ -10,6 +10,8 @@ set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_CUDA_EXTENSIONS OFF)
 
+option(HELLO_CUDA_BUILD_TESTS "Compilar testes unitários" ON)
+
 add_executable(hello_cuda src/main.cu)
 target_include_directories(hello_cuda PRIVATE include)
 
@@ -26,3 +28,16 @@ endif()
 set_target_properties(hello_cuda PROPERTIES
     CUDA_SEPARABLE_COMPILATION OFF
 )
+
+if(HELLO_CUDA_BUILD_TESTS)
+    include(CTest)
+    add_executable(indexing_test tests/indexing_test.cpp)
+    target_include_directories(indexing_test PRIVATE include)
+
+    if(NOT MSVC)
+        target_compile_options(indexing_test PRIVATE
+            -Wall -Wextra -Wpedantic -Werror)
+    endif()
+
+    add_test(NAME indexing_test COMMAND indexing_test)
+endif()

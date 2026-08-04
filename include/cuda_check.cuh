@@ -4,7 +4,6 @@
 
 #include <sstream>
 #include <stdexcept>
-#include <string>
 
 inline void checkCuda(cudaError_t status,
                       const char* expression,
