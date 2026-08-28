@@ -1,0 +1,13 @@
+/build/
+/out/
+/hello_cuda
+*.o
+*.obj
+*.out
+*.log
+compile_commands.json
+.vscode/
+.idea/
+.DS_Store
+
+/indexing_test

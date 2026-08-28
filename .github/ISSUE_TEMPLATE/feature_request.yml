@@ -1,0 +1,20 @@
+name: Sugerir melhoria
+description: Proponha uma evolução didática ou técnica.
+title: "[Melhoria]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivação
+      description: Qual problema ou aprendizado esta melhoria atende?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposta
+      description: Descreva a solução sugerida.
+    validations:
+      required: true

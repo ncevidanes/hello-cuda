@@ -1,0 +1,33 @@
+name: Relatar erro
+description: Informe um problema reproduzível no projeto.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Descrição
+      description: O que aconteceu e qual era o comportamento esperado?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Ambiente
+      description: GPU, driver, CUDA Toolkit, compilador e sistema operacional.
+      placeholder: |
+        GPU:
+        Driver:
+        CUDA Toolkit:
+        Compilador:
+        Sistema operacional:
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Comandos e saída
+      render: shell
+    validations:
+      required: true

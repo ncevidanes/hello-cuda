@@ -1,19 +1,48 @@
-# Projeto 1 — Hello CUDA
+# Hello CUDA
 
-Projeto introdutório para visualizar o modelo de execução CUDA:
+[![CI](https://github.com/ncevidanes/hello-cuda/actions/workflows/ci.yml/badge.svg)](https://github.com/ncevidanes/hello-cuda/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- detectar as GPUs disponíveis;
-- consultar propriedades da GPU;
-- lançar um kernel;
-- imprimir `blockIdx`, `threadIdx`, `blockDim` e o índice global;
-- verificar erros de lançamento e execução.
+Projeto introdutório para aprender como a GPU organiza **grids**, **blocos** e
+**threads** no CUDA.
 
-## 1. Pré-requisitos
+## Objetivos
+
+- descobrir as GPUs CUDA disponíveis;
+- consultar propriedades essenciais do dispositivo;
+- lançar um kernel com configuração 1D;
+- imprimir `blockIdx`, `threadIdx`, `blockDim` e `gridDim`;
+- calcular o índice global de cada thread;
+- tratar erros de lançamento e execução;
+- validar a fórmula de indexação com um teste independente da GPU.
+
+## Estrutura
+
+```text
+.
+├── .github/                  # CI, templates e CODEOWNERS
+├── include/
+│   ├── cuda_check.cuh        # Tratamento uniforme de erros CUDA
+│   └── indexing.hpp          # Fórmula testável do índice global
+├── scripts/
+│   └── check.sh              # Validação local
+├── src/
+│   └── main.cu               # Descoberta da GPU e kernel
+├── tests/
+│   └── indexing_test.cpp     # Teste C++ sem necessidade de GPU
+├── CMakeLists.txt
+├── Makefile
+└── README.md
+```
+
+## Pré-requisitos
+
+Para executar o kernel:
 
 - GPU NVIDIA compatível com CUDA;
 - driver NVIDIA funcional;
-- CUDA Toolkit com `nvcc`;
-- CMake 3.24 ou superior, caso use o fluxo CMake.
+- CUDA Toolkit contendo `nvcc`;
+- compilador C++17.
 
 Verifique o ambiente:
 
@@ -22,31 +51,40 @@ nvidia-smi
 nvcc --version
 ```
 
-> `nvidia-smi` comprova que o driver enxerga a GPU. `nvcc` comprova que o
-> compilador do CUDA Toolkit está instalado.
+`nvidia-smi` verifica o driver e a GPU. `nvcc` verifica a instalação do CUDA
+Toolkit.
 
-## 2. Compilação rápida com Make
+## Compilação com Make
 
 ```bash
 make
 ./hello_cuda
 ```
 
-Para limpar:
+Teste da fórmula de indexação, sem exigir GPU:
 
 ```bash
-make clean
+make test
 ```
 
-## 3. Compilação com CMake
+## Compilação com CMake
 
 ```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ./build/hello_cuda
 ```
 
-## 4. Parâmetros
+Quando o CMake não detectar o Toolkit automaticamente, informe o caminho:
+
+```bash
+cmake -S . -B build \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCUDAToolkit_ROOT=/usr/local/cuda
+```
+
+## Uso
 
 ```text
 ./hello_cuda [blocos] [threads_por_bloco] [dispositivo]
@@ -55,55 +93,15 @@ cmake --build build --parallel
 Exemplos:
 
 ```bash
-# 2 blocos, 4 threads por bloco, GPU 0
 ./hello_cuda
-
-# 3 blocos, 8 threads por bloco, GPU 0
 ./hello_cuda 3 8 0
-
-# Ajuda
 ./hello_cuda --help
 ```
 
-## 5. Como interpretar o kernel
+A configuração padrão é `<<<2, 4>>>`: dois blocos com quatro threads em cada
+bloco.
 
-O kernel é declarado assim:
-
-```cpp
-__global__ void helloCudaKernel()
-```
-
-`__global__` significa que:
-
-- a função é chamada pelo código executado na CPU, chamado de *host*;
-- a função é executada pelas threads da GPU, chamada de *device*.
-
-O lançamento:
-
-```cpp
-helloCudaKernel<<<blocks, threadsPerBlock>>>();
-```
-
-usa a sintaxe:
-
-```text
-kernel<<<quantidade_de_blocos, threads_por_bloco>>>()
-```
-
-Dentro do kernel:
-
-```cpp
-const unsigned int globalThreadIndex =
-    blockIdx.x * blockDim.x + threadIdx.x;
-```
-
-- `threadIdx.x`: posição da thread dentro do bloco;
-- `blockIdx.x`: posição do bloco dentro do grid;
-- `blockDim.x`: número de threads existentes em cada bloco;
-- `gridDim.x`: número de blocos existentes no grid;
-- `globalThreadIndex`: identificador linear único da thread no grid 1D.
-
-Para `<<<2, 4>>>`, temos:
+## Modelo de execução
 
 ```text
 Grid
@@ -111,9 +109,20 @@ Grid
 └── bloco 1: threads locais 0, 1, 2, 3 → globais 4, 5, 6, 7
 ```
 
-## 6. Saída esperada
+Em uma grade unidimensional, o índice global é:
 
-A GPU e os valores exatos dependem da máquina. A parte das threads será
+```cpp
+const auto index = blockIdx.x * blockDim.x + threadIdx.x;
+```
+
+- `threadIdx.x`: posição local dentro do bloco;
+- `blockIdx.x`: posição do bloco dentro do grid;
+- `blockDim.x`: quantidade de threads por bloco;
+- `gridDim.x`: quantidade de blocos no grid.
+
+## Saída esperada
+
+A identificação do dispositivo depende da máquina. A parte do kernel será
 semelhante a:
 
 ```text
@@ -124,31 +133,35 @@ Total de threads     : 8
 Configuração CUDA    : <<<2, 4>>>
 
 [GPU] bloco=0 | thread_local=0 | thread_global=0 | blockDim.x=4 | gridDim.x=2
-[GPU] bloco=0 | thread_local=1 | thread_global=1 | blockDim.x=4 | gridDim.x=2
-...
 [GPU] bloco=1 | thread_local=3 | thread_global=7 | blockDim.x=4 | gridDim.x=2
 ```
 
-A ordem das linhas pode mudar entre execuções. Threads da GPU não devem ser
-entendidas como um laço sequencial comum.
+A ordem das linhas não é garantida, pois as threads não devem ser entendidas
+como iterações sequenciais de um laço comum.
 
-## 7. Por que sincronizar?
+## Tratamento de erros
 
-O lançamento de um kernel é normalmente assíncrono em relação à CPU. Por isso
-o programa usa:
+O programa verifica:
 
-```cpp
-CUDA_CHECK(cudaGetLastError());
-CUDA_CHECK(cudaDeviceSynchronize());
-```
+- chamadas da Runtime API;
+- parâmetros do dispositivo selecionado;
+- limite de threads por bloco;
+- limite de blocos no eixo `x`;
+- erros imediatos de lançamento;
+- erros assíncronos revelados por `cudaDeviceSynchronize()`.
 
-- `cudaGetLastError()` verifica problemas imediatos no lançamento;
-- `cudaDeviceSynchronize()` espera o kernel terminar e revela erros ocorridos
-  durante sua execução.
+## Integração contínua
 
-## 8. Experimentos guiados
+A CI executa dois trabalhos:
 
-Execute e desenhe o grid correspondente:
+1. teste C++ da fórmula de indexação em runner comum;
+2. compilação com `nvcc` dentro de um container oficial CUDA.
+
+O kernel não é executado na CI porque os runners hospedados não oferecem GPU
+NVIDIA. A execução deve ser validada localmente ou em um runner próprio com
+GPU.
+
+## Experimentos guiados
 
 ```bash
 ./hello_cuda 1 1
@@ -157,19 +170,23 @@ Execute e desenhe o grid correspondente:
 ./hello_cuda 3 5
 ```
 
-Perguntas:
+Antes de executar, determine:
 
-1. Quantas vezes o kernel é executado em cada caso?
-2. Em quais blocos aparece `thread_local=0`?
-3. Qual é o maior `thread_global` em `<<<3, 5>>>`?
-4. Por que `threadIdx.x` volta para zero em cada novo bloco?
-5. A ordem da impressão permanece igual em todas as execuções?
+1. quantas threads serão criadas;
+2. qual será o maior índice global;
+3. quantas vezes `threadIdx.x == 0` aparecerá;
+4. em qual bloco cada índice global estará.
 
-## 9. Critério de conclusão
+## Critério de conclusão
 
-O projeto está concluído quando você consegue, sem consultar a fórmula:
+O projeto está concluído quando você consegue:
 
-1. prever o número total de threads;
-2. calcular o índice global de qualquer thread;
-3. explicar a diferença entre grid, bloco e thread;
-4. explicar por que o kernel precisa de `cudaDeviceSynchronize()` neste exemplo.
+- diferenciar grid, bloco e thread;
+- prever o total de threads de um lançamento;
+- calcular qualquer índice global sem consultar a fórmula;
+- explicar por que `threadIdx.x` recomeça em zero em cada bloco;
+- explicar por que a CPU precisa sincronizar neste exemplo.
+
+## Licença
+
+Distribuído sob a licença [MIT](LICENSE).
