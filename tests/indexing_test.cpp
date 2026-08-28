@@ -1,6 +1,5 @@
 #include "indexing.hpp"
 
-#include <cassert>
 #include <cstddef>
 #include <iostream>
 
@@ -14,7 +13,17 @@ int main() {
     for (std::size_t block = 0; block < 3; ++block) {
         for (std::size_t thread = 0; thread < 5; ++thread) {
             const auto expected = block * 5 + thread;
-            assert(hello_cuda::globalThreadIndex(block, 5, thread) == expected);
+            const auto actual =
+                hello_cuda::globalThreadIndex(block, 5, thread);
+
+            if (actual != expected) {
+                std::cerr
+                    << "Falha no teste de indexação: bloco=" << block
+                    << ", thread=" << thread
+                    << ", esperado=" << expected
+                    << ", obtido=" << actual << '\n';
+                return 1;
+            }
         }
     }
 
